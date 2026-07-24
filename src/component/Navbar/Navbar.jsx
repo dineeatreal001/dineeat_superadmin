@@ -192,7 +192,7 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
             onClick={handleProfileClick}
             className="flex items-center justify-center w-8 h-8 md:w-10 md:h-10 bg-gradient-to-b from-blue-400 to-indigo-500 text-white font-semibold rounded-full hover:opacity-90 transition-all text-sm md:text-base"
           >
-            AS
+            DE
           </button>
         </div>
       </div>

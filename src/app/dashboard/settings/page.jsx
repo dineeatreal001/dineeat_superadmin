@@ -32,7 +32,7 @@ const SettingsPage = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input type="email" defaultValue="arman@orderload.com" className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+                  <input type="email" defaultValue="rishi@dineeat.com" className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
                 </div>
               </div>
             </div>

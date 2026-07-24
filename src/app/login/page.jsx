@@ -184,7 +184,7 @@ const Page = () => {
         {/* Footer Text */}
         <div className="mt-8 pt-6 text-center border-t border-gray-200">
           <div className="font-bold text-gray-800 text-2xl sm:text-3xl">
-            OrderLoad
+            DineEat
           </div>
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
             For Your Best! <br />

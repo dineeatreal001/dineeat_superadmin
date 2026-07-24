@@ -21,17 +21,16 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
 
   const menuItems = [
     { name: 'Home', icon: '🏠', path: '/dashboard' },
-    { name: 'Forward Order', icon: '📦', path: '/dashboard/forward-order' },
-    { name: 'Reverse Order', icon: '🔄', path: '/dashboard/reverse-order' },
+    { name: 'Add Store', icon: '📦', path: '/dashboard/add-store' },
+    { name: 'Manage Store', icon: '🔄', path: '/dashboard/manage-store' },
     { name: 'NDR', icon: '📋', path: '/dashboard/ndr' },
-    { name: 'Billing', icon: '💰', path: '/dashboard/billing' },
-    { name: 'Post Shipping', icon: '🚚', path: '/dashboard/post-shipping' },
+    { name: 'Subscription', icon: '💰', path: '/dashboard/subscription' },
+    { name: 'Post Creation', icon: '🚚', path: '/dashboard/post-shipping' },
   ];
 
   const insightItems = [
-    { name: 'Weight Module', icon: '⚖️', path: '/dashboard/weight-module' },
-    { name: 'Configure', icon: '⚙️', path: '/dashboard/configure' },
-    { name: 'Tools', icon: '🔧', path: '/dashboard/tools' },
+    { name: 'Settings', icon: '⚖️', path: '/dashboard/weight-module' },
+    { name: 'Configurations', icon: '⚙️', path: '/dashboard/configure' },
   ];
 
   // For mobile: sidebar is hidden by default and opens as an overlay
@@ -57,7 +56,7 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
             <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-2">
                 <img src="/Loading.svg" alt="Logo" className="w-8 h-8" />
-                <span className="font-bold text-xl text-gray-800">OrderLoad</span>
+                <span className="font-bold text-xl text-gray-800">DineEat</span>
               </div>
               <button 
                 onClick={onClose}
@@ -137,7 +136,7 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
         {isSidebarOpen && (
           <div className="flex items-center gap-2 mb-8">
             <img src="/Loading.svg" alt="Logo" className="w-8 h-8" />
-            <span className="font-bold text-xl text-gray-800">OrderLoad</span>
+            <span className="font-bold text-xl text-gray-800">DineEat</span>
           </div>
         )}
 
