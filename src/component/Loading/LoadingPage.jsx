@@ -9,7 +9,7 @@ export default function LoadingPage() {
       <div className="animate-bounce">
         {/* SVG from public folder */}
         <img 
-          src="/Loading.svg" 
+          src="/logo.png" 
           alt="Loading" 
           width={100} 
           height={100}

@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-const Navbar = ({ onMenuClick, isSidebarOpen }) => {
+const Navbar = ({ onMenuClick, isSidebarOpen, isSidebarHovered }) => {
   const router = useRouter();
   const pathname = usePathname();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
@@ -77,10 +77,17 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
     return notifications.filter(n => !n.read).length;
   };
 
+  // Calculate left position based on sidebar state
+  const getLeftPosition = () => {
+    if (isMobile) return '0';
+    if (isSidebarOpen || isSidebarHovered) return '16rem'; // 64 (w-64)
+    return '5rem'; // 20 (w-20)
+  };
+
   return (
     <div 
-      className="bg-white border-b border-gray-200 px-3 md:px-6 py-3 md:py-4 fixed top-0 right-0 left-0 z-20 transition-all duration-300" 
-      style={{ left: !isMobile && isSidebarOpen ? '16rem' : !isMobile && !isSidebarOpen ? '5rem' : '0' }}
+      className="bg-white border-b border-gray-200 px-3 md:px-6 py-3 md:py-4 fixed top-0 right-0 z-20 transition-all duration-300" 
+      style={{ left: getLeftPosition() }}
     >
       <div className="flex items-center justify-between">
         {/* Left side - Hamburger Menu and Logo */}
@@ -95,7 +102,18 @@ const Navbar = ({ onMenuClick, isSidebarOpen }) => {
             </svg>
           </button>
 
-        
+          {/* Back to Dashboard - Visible on mobile or when sidebar is closed */}
+          {isMobile && (
+            <button 
+              onClick={handleBackToDashboard}
+              className="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              <span>Dashboard</span>
+            </button>
+          )}
         </div>
 
         {/* Right side - Buttons */}

@@ -2,11 +2,19 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { LogOut } from 'lucide-react';
 
-const Sidebar = ({ isSidebarOpen, onClose }) => {
+const Sidebar = ({ isSidebarOpen, onClose, onHoverChange }) => {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobile, setIsMobile] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  const handleLogout = () => {
+    localStorage.clear();
+    router.push('/');
+  };
 
   useEffect(() => {
     const checkMobile = () => {
@@ -15,7 +23,7 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
     
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    
+
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
@@ -23,13 +31,13 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
     { name: 'Home', icon: '🏠', path: '/dashboard' },
     { name: 'Add Store', icon: '📦', path: '/dashboard/add-store' },
     { name: 'Manage Store', icon: '🔄', path: '/dashboard/manage-store' },
-    { name: 'NDR', icon: '📋', path: '/dashboard/ndr' },
+    { name: 'Menu', icon: '📋', path: '/dashboard/menu' },
     { name: 'Subscription', icon: '💰', path: '/dashboard/subscription' },
-    { name: 'Post Creation', icon: '🚚', path: '/dashboard/post-shipping' },
+    { name: 'Complaint Box', icon: '🚚', path: '/dashboard/complaints' },
   ];
 
   const insightItems = [
-    { name: 'Settings', icon: '⚖️', path: '/dashboard/weight-module' },
+    { name: 'Settings', icon: '⚖️', path: '/dashboard/settings' },
     { name: 'Configurations', icon: '⚙️', path: '/dashboard/configure' },
   ];
 
@@ -40,14 +48,14 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
         {/* Overlay */}
         {isSidebarOpen && (
           <div 
-            className="fixed inset-0 bg-black bg-opacity-50 z-20 transition-opacity duration-300"
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
             onClick={onClose}
           />
         )}
         
         {/* Mobile Sidebar */}
         <div 
-          className={`fixed top-0 left-0 h-full bg-white shadow-xl z-30 transition-all duration-300 overflow-y-auto ${
+          className={`fixed top-0 left-0 h-full bg-white shadow-xl z-50 transition-all duration-300 overflow-y-auto ${
             isSidebarOpen ? 'w-64 translate-x-0' : 'w-64 -translate-x-full'
           }`}
         >
@@ -55,7 +63,7 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
             {/* Close button for mobile */}
             <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-2">
-                <img src="/Loading.svg" alt="Logo" className="w-8 h-8" />
+                <img src="/logo.png" alt="Logo" className="w-8 h-8" />
                 <span className="font-bold text-xl text-gray-800">DineEat</span>
               </div>
               <button 
@@ -118,32 +126,51 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
                 </div>
               </div>
             </nav>
+
+            {/* Logout */}
+            <div className="mt-8 pt-4 border-t border-gray-100">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
+              >
+                <LogOut className="w-5 h-5" />
+                <span>Logout</span>
+              </button>
+            </div>
           </div>
         </div>
       </>
     );
   }
 
-  // Desktop version
+  // Desktop version with hover functionality
   return (
     <div 
-      className={`bg-white border-r border-gray-200 h-screen fixed top-0 left-0 z-10 transition-all duration-300 ${
-        isSidebarOpen ? 'w-64' : 'w-20'
+      className={`bg-white border-r border-gray-200 h-screen fixed top-0 left-0 z-50 transition-all duration-300 ${
+        isSidebarOpen || isHovered ? 'w-64' : 'w-20'
       }`}
+      onMouseEnter={() => {
+        setIsHovered(true);
+        if (onHoverChange) onHoverChange(true);
+      }}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        if (onHoverChange) onHoverChange(false);
+      }}
     >
       <div className="p-6">
         {/* Logo Section - Hidden when sidebar is minimized */}
-        {isSidebarOpen && (
+        {(isSidebarOpen || isHovered) && (
           <div className="flex items-center gap-2 mb-8">
-            <img src="/Loading.svg" alt="Logo" className="w-8 h-8" />
+            <img src="/logo.png" alt="Logo" className="w-8 h-8" />
             <span className="font-bold text-xl text-gray-800">DineEat</span>
           </div>
         )}
 
         {/* Show only icon when minimized */}
-        {!isSidebarOpen && (
+        {!isSidebarOpen && !isHovered && (
           <div className="flex justify-center mb-8">
-            <img src="/Loading.svg" alt="Logo" className="w-8 h-8" />
+            <img src="/logo.png" alt="Logo" className="w-8 h-8" />
           </div>
         )}
 
@@ -151,7 +178,7 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
         <nav className="space-y-6">
           {/* Home Section */}
           <div>
-            {isSidebarOpen && (
+            {(isSidebarOpen || isHovered) && (
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                 Home
               </h3>
@@ -165,11 +192,11 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
                     pathname === item.path
                       ? 'bg-blue-50 text-blue-600'
                       : 'text-gray-700 hover:bg-gray-50'
-                  } ${!isSidebarOpen && 'justify-center'}`}
-                  title={!isSidebarOpen ? item.name : ''}
+                  } ${!isSidebarOpen && !isHovered && 'justify-center'}`}
+                  title={!isSidebarOpen && !isHovered ? item.name : ''}
                 >
                   <span className="text-xl">{item.icon}</span>
-                  {isSidebarOpen && <span>{item.name}</span>}
+                  {(isSidebarOpen || isHovered) && <span>{item.name}</span>}
                 </Link>
               ))}
             </div>
@@ -177,7 +204,7 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
 
           {/* Insights Section */}
           <div>
-            {isSidebarOpen && (
+            {(isSidebarOpen || isHovered) && (
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                 Insights
               </h3>
@@ -191,16 +218,30 @@ const Sidebar = ({ isSidebarOpen, onClose }) => {
                     pathname === item.path
                       ? 'bg-blue-50 text-blue-600'
                       : 'text-gray-700 hover:bg-gray-50'
-                  } ${!isSidebarOpen && 'justify-center'}`}
-                  title={!isSidebarOpen ? item.name : ''}
+                  } ${!isSidebarOpen && !isHovered && 'justify-center'}`}
+                  title={!isSidebarOpen && !isHovered ? item.name : ''}
                 >
                   <span className="text-xl">{item.icon}</span>
-                  {isSidebarOpen && <span>{item.name}</span>}
+                  {(isSidebarOpen || isHovered) && <span>{item.name}</span>}
                 </Link>
               ))}
             </div>
           </div>
         </nav>
+
+        {/* Logout */}
+        <div className="mt-8 pt-4 border-t border-gray-100">
+          <button
+            onClick={handleLogout}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-red-500 bg-red-50 hover:bg-red-100 transition-colors ${
+              !isSidebarOpen && !isHovered && 'justify-center'
+            }`}
+            title={!isSidebarOpen && !isHovered ? 'Logout' : ''}
+          >
+            <LogOut className="w-5 h-5 flex-shrink-0" />
+            {(isSidebarOpen || isHovered) && <span>Logout</span>}
+          </button>
+        </div>
       </div>
     </div>
   );

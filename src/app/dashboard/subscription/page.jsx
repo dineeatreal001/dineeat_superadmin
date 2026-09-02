@@ -1,13 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Crown, Search, Loader2, Info, X, Calendar, 
+import {
+  Crown, Search, Loader2, Info, X, Calendar,
   User, Phone, Mail, Download, Plus, Edit, Trash2,
   TrendingUp, Star, AlertCircle, Filter, CheckCircle,
   Clock, DollarSign, Package, Users, CreditCard,
   Zap, Gift, Award, Target, Shield, Sparkles,
-  RefreshCw, Ban, Save
+  RefreshCw, Ban, Save, Check, AlertTriangle
 } from 'lucide-react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
@@ -15,6 +15,11 @@ import Navbar from '@/component/Navbar/Navbar';
 import Sidebar from '@/component/Sidebar/Sidebar';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3085/api';
+
+const getAuthHeaders = () => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('superAdminToken') : null;
+  return { headers: { Authorization: `Bearer ${token}` } };
+};
 
 const formatDate = (date) => {
   if (!date) return 'N/A';
@@ -45,24 +50,82 @@ const getPlanColor = (plan) => {
   return colors[plan?.toLowerCase()] || 'from-indigo-500 to-purple-600';
 };
 
-// Edit Subscription Modal
-function EditSubscriptionModal({ isOpen, onClose, subscription, onSuccess }) {
-  const [formData, setFormData] = useState({
-    planName: '',
-    planType: 'basic',
-    price: '',
-    duration: 'monthly',
-    features: [],
-    description: '',
-    maxStores: 1,
-    maxItems: 50,
-    supportLevel: 'basic'
-  });
+const emptyPlanForm = {
+  planName: '',
+  planType: 'basic',
+  price: '',
+  duration: 'monthly',
+  features: [],
+  description: '',
+  maxStores: 1,
+  maxItems: 50,
+  supportLevel: 'basic'
+};
+
+// ============================================================
+// Toast Notification System
+// ============================================================
+function Toast({ message, type, onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const bgColors = {
+    success: 'from-green-500 to-emerald-600',
+    error: 'from-red-500 to-rose-600',
+    info: 'from-blue-500 to-indigo-600',
+    warning: 'from-yellow-500 to-orange-600'
+  };
+
+  const icons = {
+    success: <Check className="w-5 h-5" />,
+    error: <AlertTriangle className="w-5 h-5" />,
+    info: <Info className="w-5 h-5" />,
+    warning: <AlertCircle className="w-5 h-5" />
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -20, scale: 0.95 }}
+      className={`fixed top-4 right-4 z-[100] max-w-md w-full shadow-2xl rounded-xl overflow-hidden`}
+    >
+      <div className={`bg-gradient-to-r ${bgColors[type]} p-4 text-white`}>
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 mt-0.5">{icons[type]}</div>
+          <div className="flex-1">
+            <p className="text-sm font-medium">{message}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex-shrink-0 p-1 rounded-lg hover:bg-white/20 transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <motion.div
+          initial={{ width: '100%' }}
+          animate={{ width: '0%' }}
+          transition={{ duration: 5, ease: 'linear' }}
+          className="h-1 bg-white/30 mt-2 rounded-full"
+        />
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================================
+// Create / Edit Plan Modal (shared — mode: 'create' | 'edit')
+// ============================================================
+function PlanFormModal({ isOpen, mode, onClose, subscription, onSuccess, showToast }) {
+  const [formData, setFormData] = useState(emptyPlanForm);
   const [feature, setFeature] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (subscription) {
+    if (mode === 'edit' && subscription) {
       setFormData({
         planName: subscription.planName || '',
         planType: subscription.planType || 'basic',
@@ -74,23 +137,34 @@ function EditSubscriptionModal({ isOpen, onClose, subscription, onSuccess }) {
         maxItems: subscription.maxItems || 50,
         supportLevel: subscription.supportLevel || 'basic'
       });
+    } else if (mode === 'create') {
+      setFormData(emptyPlanForm);
     }
-  }, [subscription]);
+  }, [subscription, mode, isOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+
     try {
-      const response = await axios.put(`${API_BASE_URL}/subscriptions/update/${subscription.id}`, formData);
+      let response;
+      if (mode === 'create') {
+        response = await axios.post(`${API_BASE_URL}/subscriptions/create`, formData, getAuthHeaders());
+      } else {
+        response = await axios.put(`${API_BASE_URL}/subscriptions/update/${subscription.id}`, formData, getAuthHeaders());
+      }
+
       if (response.data.success) {
-        alert('Subscription plan updated successfully!');
+        showToast(
+          mode === 'create' ? 'Subscription plan created successfully!' : 'Subscription plan updated successfully!',
+          'success'
+        );
         onSuccess();
         onClose();
       }
     } catch (error) {
-      console.error('Error updating subscription:', error);
-      alert(error.response?.data?.message || 'Failed to update subscription');
+      console.error('Error saving subscription:', error);
+      showToast(error.response?.data?.message || 'Failed to save subscription', 'error');
     } finally {
       setLoading(false);
     }
@@ -131,9 +205,11 @@ function EditSubscriptionModal({ isOpen, onClose, subscription, onSuccess }) {
           <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex justify-between items-center">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
-                <Edit className="w-5 h-5 text-white" />
+                {mode === 'create' ? <Plus className="w-5 h-5 text-white" /> : <Edit className="w-5 h-5 text-white" />}
               </div>
-              <h2 className="text-xl font-bold text-gray-900">Edit Subscription Plan</h2>
+              <h2 className="text-xl font-bold text-gray-900">
+                {mode === 'create' ? 'Create Subscription Plan' : 'Edit Subscription Plan'}
+              </h2>
             </div>
             <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition">
               <X className="w-5 h-5 text-gray-400" />
@@ -204,6 +280,18 @@ function EditSubscriptionModal({ isOpen, onClose, subscription, onSuccess }) {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Support Level</label>
+                <select
+                  value={formData.supportLevel}
+                  onChange={(e) => setFormData({ ...formData, supportLevel: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="basic">Basic</option>
+                  <option value="priority">Priority</option>
+                  <option value="24/7">24/7</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -225,7 +313,12 @@ function EditSubscriptionModal({ isOpen, onClose, subscription, onSuccess }) {
                   onChange={(e) => setFeature(e.target.value)}
                   placeholder="Add a feature"
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  onKeyPress={(e) => e.key === 'Enter' && addFeature()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addFeature();
+                    }
+                  }}
                 />
                 <button
                   type="button"
@@ -264,7 +357,7 @@ function EditSubscriptionModal({ isOpen, onClose, subscription, onSuccess }) {
                 disabled={loading}
                 className="flex-1 px-4 py-2 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition disabled:opacity-50"
               >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Save Changes'}
+                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : mode === 'create' ? 'Create Plan' : 'Save Changes'}
               </button>
             </div>
           </form>
@@ -274,8 +367,212 @@ function EditSubscriptionModal({ isOpen, onClose, subscription, onSuccess }) {
   );
 }
 
-// Subscription Card Component with Edit
-function SubscriptionCard({ subscription, onViewDetails, onEdit }) {
+// ============================================================
+// Delete Plan Confirmation Modal
+// ============================================================
+function DeletePlanModal({ isOpen, onClose, subscription, onSuccess, showToast }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleDelete = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.delete(`${API_BASE_URL}/subscriptions/delete/${subscription.id}`, getAuthHeaders());
+      if (response.data.success) {
+        showToast('Subscription plan deleted successfully!', 'success');
+        onSuccess();
+        onClose();
+      }
+    } catch (error) {
+      console.error('Error deleting plan:', error);
+      showToast(error.response?.data?.message || 'Failed to delete plan', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen || !subscription) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-white rounded-2xl max-w-md w-full"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 rounded-xl">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Delete Subscription Plan</h3>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete <span className="font-semibold">{subscription.planName}</span>? This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={loading}
+                className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+// ============================================================
+// Assign Subscription Modal (for stores with no active plan)
+// ============================================================
+function AssignSubscriptionModal({ isOpen, onClose, store, plans, onSuccess, showToast }) {
+  const [planId, setPlanId] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setPlanId('');
+      setPaymentMethod('');
+    }
+  }, [isOpen]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!planId) return;
+    setLoading(true);
+
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/subscriptions/assign`,
+        { storeId: store.id, planId, paymentMethod },
+        getAuthHeaders()
+      );
+      if (response.data.success) {
+        showToast('Subscription assigned successfully!', 'success');
+        onSuccess();
+        onClose();
+      }
+    } catch (error) {
+      console.error('Error assigning subscription:', error);
+      showToast(error.response?.data?.message || 'Failed to assign subscription', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen || !store) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-white rounded-2xl max-w-md w-full"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
+                  <Gift className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Assign Subscription</h3>
+              </div>
+              <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <p className="text-gray-500 text-sm mb-4">
+              Assigning a plan to <span className="font-semibold text-gray-800">{store.name}</span>
+            </p>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select Plan *</label>
+                <select
+                  value={planId}
+                  onChange={(e) => setPlanId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  required
+                >
+                  <option value="">Choose a plan...</option>
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.planName} — ₹{p.price}/{p.duration}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select method...</option>
+                  <option value="card">Card</option>
+                  <option value="upi">UPI</option>
+                  <option value="bank">Bank Transfer</option>
+                  <option value="cash">Cash</option>
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || !planId}
+                  className="flex-1 px-4 py-2 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition disabled:opacity-50"
+                >
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Assign Plan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+// ============================================================
+// Subscription Card
+// ============================================================
+function SubscriptionCard({ subscription, onViewDetails, onEdit, onDelete }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -289,7 +586,7 @@ function SubscriptionCard({ subscription, onViewDetails, onEdit }) {
             <Crown className="w-6 h-6 text-white" />
             <h3 className="text-xl font-bold text-white">{subscription.planName}</h3>
           </div>
-          <span className={`px-3 py-1 text-xs font-semibold rounded-full bg-white/20 text-white`}>
+          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-white/20 text-white">
             {subscription.planType}
           </span>
         </div>
@@ -340,30 +637,39 @@ function SubscriptionCard({ subscription, onViewDetails, onEdit }) {
           >
             <Edit className="w-4 h-4" />
           </button>
+          <button
+            onClick={() => onDelete(subscription)}
+            className="py-2 px-3 bg-gradient-to-b from-red-400 to-red-600 text-white rounded-lg hover:shadow-lg transition"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </motion.div>
   );
 }
 
-// User Subscription Management Component
-function UserSubscriptionManager({ users, onRefresh }) {
+// ============================================================
+// User / Store Subscription Manager
+// ============================================================
+function UserSubscriptionManager({ users, plans, onRefresh, showToast }) {
   const [selectedUser, setSelectedUser] = useState(null);
   const [actionModal, setActionModal] = useState(null);
+  const [assignModalStore, setAssignModalStore] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleRenewSubscription = async (userId) => {
     setLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/subscriptions/renew/${userId}`);
+      const response = await axios.post(`${API_BASE_URL}/subscriptions/renew/${userId}`, {}, getAuthHeaders());
       if (response.data.success) {
-        alert('Subscription renewed successfully!');
+        showToast('Subscription renewed successfully!', 'success');
         onRefresh();
         setActionModal(null);
       }
     } catch (error) {
       console.error('Error renewing subscription:', error);
-      alert(error.response?.data?.message || 'Failed to renew subscription');
+      showToast(error.response?.data?.message || 'Failed to renew subscription', 'error');
     } finally {
       setLoading(false);
     }
@@ -372,15 +678,15 @@ function UserSubscriptionManager({ users, onRefresh }) {
   const handleCancelSubscription = async (userId) => {
     setLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/subscriptions/cancel/${userId}`);
+      const response = await axios.post(`${API_BASE_URL}/subscriptions/cancel/${userId}`, {}, getAuthHeaders());
       if (response.data.success) {
-        alert('Subscription cancelled successfully!');
+        showToast('Subscription cancelled successfully!', 'success');
         onRefresh();
         setActionModal(null);
       }
     } catch (error) {
       console.error('Error cancelling subscription:', error);
-      alert(error.response?.data?.message || 'Failed to cancel subscription');
+      showToast(error.response?.data?.message || 'Failed to cancel subscription', 'error');
     } finally {
       setLoading(false);
     }
@@ -389,24 +695,26 @@ function UserSubscriptionManager({ users, onRefresh }) {
   const handleToggleAutoRenew = async (userId, currentStatus) => {
     setLoading(true);
     try {
-      const response = await axios.put(`${API_BASE_URL}/subscriptions/auto-renew/${userId}`, {
-        autoRenew: !currentStatus
-      });
+      const response = await axios.put(
+        `${API_BASE_URL}/subscriptions/auto-renew/${userId}`,
+        { autoRenew: !currentStatus },
+        getAuthHeaders()
+      );
       if (response.data.success) {
-        alert(`Auto-renew ${!currentStatus ? 'enabled' : 'disabled'} successfully!`);
+        showToast(`Auto-renew ${!currentStatus ? 'enabled' : 'disabled'} successfully!`, 'success');
         onRefresh();
         setActionModal(null);
       }
     } catch (error) {
       console.error('Error toggling auto-renew:', error);
-      alert(error.response?.data?.message || 'Failed to update auto-renew setting');
+      showToast(error.response?.data?.message || 'Failed to update auto-renew setting', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const isExpired = (endDate) => {
-    return new Date(endDate) < new Date();
+    return endDate ? new Date(endDate) < new Date() : false;
   };
 
   return (
@@ -414,7 +722,8 @@ function UserSubscriptionManager({ users, onRefresh }) {
       {users.map((user) => {
         const expired = isExpired(user.subscription?.endDate);
         const isActive = user.subscription?.status === 'active' && !expired;
-        
+        const hasNoPlan = !user.subscription || user.subscription?.status === 'cancelled';
+
         return (
           <div key={user.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -427,7 +736,7 @@ function UserSubscriptionManager({ users, onRefresh }) {
                   <p className="text-sm text-gray-500 truncate">{user.email}</p>
                 </div>
               </div>
-              
+
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`px-2 py-1 text-xs rounded-full ${getSubscriptionStatusColor(user.subscription?.status)}`}>
                   {user.subscription?.status || 'No Plan'}
@@ -442,6 +751,15 @@ function UserSubscriptionManager({ users, onRefresh }) {
                     <RefreshCw className="w-3 h-3" />
                     Auto-Renew
                   </span>
+                )}
+                {hasNoPlan && (
+                  <button
+                    onClick={() => setAssignModalStore(user)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-indigo-500 text-white text-xs rounded-lg hover:bg-indigo-600 transition"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Assign Plan
+                  </button>
                 )}
               </div>
             </div>
@@ -471,7 +789,7 @@ function UserSubscriptionManager({ users, onRefresh }) {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {expired && (
+                  {expired && user.subscription?.status !== 'cancelled' && (
                     <button
                       onClick={() => {
                         setSelectedUser(user);
@@ -484,7 +802,7 @@ function UserSubscriptionManager({ users, onRefresh }) {
                       Renew Subscription
                     </button>
                   )}
-                  
+
                   {isActive && (
                     <>
                       <button
@@ -502,7 +820,7 @@ function UserSubscriptionManager({ users, onRefresh }) {
                         <RefreshCw className="w-3 h-3" />
                         {user.subscription?.autoRenew ? 'Disable Auto-Renew' : 'Enable Auto-Renew'}
                       </button>
-                      
+
                       <button
                         onClick={() => {
                           setSelectedUser(user);
@@ -566,7 +884,7 @@ function UserSubscriptionManager({ users, onRefresh }) {
                     }}
                     disabled={loading}
                     className={`flex-1 px-4 py-2 rounded-lg text-white transition ${
-                      actionModal === 'cancel' 
+                      actionModal === 'cancel'
                         ? 'bg-red-500 hover:bg-red-600'
                         : 'bg-green-500 hover:bg-green-600'
                     }`}
@@ -579,405 +897,22 @@ function UserSubscriptionManager({ users, onRefresh }) {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
 
-export default function SubscriptionsPage() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [subscriptions, setSubscriptions] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('subscriptions');
-  const [selectedSubscription, setSelectedSubscription] = useState(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [stats, setStats] = useState({
-    totalPlans: 0,
-    activeSubscribers: 0,
-    totalRevenue: 0,
-    popularPlan: ''
-  });
-
-  useEffect(() => {
-    const checkMobile = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      if (!mobile) {
-        setIsSidebarOpen(true);
-      } else {
-        setIsSidebarOpen(false);
-      }
-    };
-
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  useEffect(() => {
-    fetchSubscriptions();
-    fetchUsers();
-  }, []);
-
-  const fetchSubscriptions = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/subscriptions/all`);
-      if (response.data.success) {
-        setSubscriptions(response.data.data);
-        calculateStats(response.data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching subscriptions:', error);
-      // Demo data for testing
-      const demoData = [
-        {
-          id: 1,
-          planName: 'Basic Plan',
-          planType: 'basic',
-          price: 499,
-          duration: 'monthly',
-          maxStores: 1,
-          maxItems: 50,
-          features: ['Basic Support', '1 Store', '50 Items', 'Email Support'],
-          subscribers: 45
-        },
-        {
-          id: 2,
-          planName: 'Premium Plan',
-          planType: 'premium',
-          price: 999,
-          duration: 'monthly',
-          maxStores: 3,
-          maxItems: 200,
-          features: ['Priority Support', '3 Stores', '200 Items', 'Email & Chat Support', 'Analytics'],
-          subscribers: 28
-        },
-        {
-          id: 3,
-          planName: 'Enterprise Plan',
-          planType: 'enterprise',
-          price: 2499,
-          duration: 'monthly',
-          maxStores: 10,
-          maxItems: 1000,
-          features: ['24/7 Support', '10 Stores', 'Unlimited Items', 'Dedicated Account Manager', 'API Access', 'Custom Integration'],
-          subscribers: 12
-        }
-      ];
-      setSubscriptions(demoData);
-      calculateStats(demoData);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchUsers = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/users/all`);
-      if (response.data.success) {
-        setUsers(response.data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      // Demo data for testing
-      const demoUsers = [
-        { 
-          id: 1, 
-          name: 'John Doe', 
-          email: 'john@example.com', 
-          subscription: { 
-            planName: 'Premium Plan', 
-            status: 'active', 
-            startDate: '2024-01-01', 
-            endDate: '2025-01-01', 
-            amount: 999, 
-            paymentMethod: 'Card',
-            autoRenew: true
-          } 
-        },
-        { 
-          id: 2, 
-          name: 'Jane Smith', 
-          email: 'jane@example.com', 
-          subscription: { 
-            planName: 'Basic Plan', 
-            status: 'active', 
-            startDate: '2024-02-01', 
-            endDate: '2024-05-01', 
-            amount: 499, 
-            paymentMethod: 'UPI',
-            autoRenew: false
-          } 
-        },
-        { 
-          id: 3, 
-          name: 'Mike Johnson', 
-          email: 'mike@example.com', 
-          subscription: { 
-            planName: 'Enterprise Plan', 
-            status: 'active', 
-            startDate: '2024-01-15', 
-            endDate: '2024-07-15', 
-            amount: 2499, 
-            paymentMethod: 'Bank Transfer',
-            autoRenew: true
-          } 
-        },
-        { 
-          id: 4, 
-          name: 'Sarah Wilson', 
-          email: 'sarah@example.com', 
-          subscription: { 
-            planName: 'Premium Plan', 
-            status: 'expired', 
-            startDate: '2023-06-01', 
-            endDate: '2024-02-01', 
-            amount: 999, 
-            paymentMethod: 'Card',
-            autoRenew: false
-          } 
-        }
-      ];
-      setUsers(demoUsers);
-    }
-  };
-
-  const calculateStats = (data) => {
-    const totalPlans = data.length;
-    const activeSubscribers = data.reduce((sum, plan) => sum + (plan.subscribers || 0), 0);
-    const totalRevenue = data.reduce((sum, plan) => sum + ((plan.subscribers || 0) * plan.price), 0);
-    const popularPlan = data.reduce((prev, current) => 
-      (prev.subscribers > current.subscribers) ? prev : current
-    , data[0])?.planName || 'N/A';
-
-    setStats({ totalPlans, activeSubscribers, totalRevenue, popularPlan });
-  };
-
-  const exportToExcel = () => {
-    const exportData = subscriptions.map(sub => ({
-      'Plan Name': sub.planName,
-      'Plan Type': sub.planType,
-      'Price (₹)': sub.price,
-      'Duration': sub.duration,
-      'Max Stores': sub.maxStores,
-      'Max Items': sub.maxItems,
-      'Active Subscribers': sub.subscribers || 0,
-      'Features': sub.features?.join(', ') || 'N/A',
-      'Estimated Revenue': (sub.subscribers || 0) * sub.price
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Subscriptions');
-    const fileName = `subscriptions_export_${new Date().toISOString().split('T')[0]}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-  };
-
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
-  };
-
-  const closeSidebar = () => {
-    if (isMobile) {
-      setIsSidebarOpen(false);
-    }
-  };
-
-  const handleEditClick = (subscription) => {
-    setSelectedSubscription(subscription);
-    setShowEditModal(true);
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Sidebar isSidebarOpen={isSidebarOpen} onClose={closeSidebar} />
-      <Navbar onMenuClick={toggleSidebar} isSidebarOpen={isSidebarOpen} />
-      
-      <div className={`transition-all duration-300 pt-20 ${
-        !isMobile && isSidebarOpen ? 'ml-64' : !isMobile && !isSidebarOpen ? 'ml-20' : 'ml-0'
-      }`}>
-        <div className="px-4 sm:px-6 py-4 sm:py-8 max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
-                <Crown className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Subscription Management</h1>
-                <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Manage plans and user subscriptions</p>
-              </div>
-            </div>
-            <button
-              onClick={exportToExcel}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-br from-green-500 to-emerald-600 text-white rounded-lg hover:shadow-lg transition shadow-md font-medium text-sm"
-            >
-              <Download className="w-4 h-4" />
-              Export to Excel
-            </button>
-          </div>
-
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-            <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-xs sm:text-sm">Total Plans</p>
-                  <p className="text-gray-900 text-xl sm:text-2xl font-bold mt-1">{stats.totalPlans}</p>
-                </div>
-                <div className="p-2 sm:p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
-                  <Crown className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-xs sm:text-sm">Active Subscribers</p>
-                  <p className="text-gray-900 text-xl sm:text-2xl font-bold mt-1">{stats.activeSubscribers}</p>
-                </div>
-                <div className="p-2 sm:p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl">
-                  <Users className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-xs sm:text-sm">Monthly Revenue</p>
-                  <p className="text-gray-900 text-xl sm:text-2xl font-bold mt-1">₹{stats.totalRevenue.toLocaleString()}</p>
-                </div>
-                <div className="p-2 sm:p-3 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl">
-                  <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-xs sm:text-sm">Popular Plan</p>
-                  <p className="text-gray-900 text-base sm:text-lg font-bold mt-1 truncate">{stats.popularPlan}</p>
-                </div>
-                <div className="p-2 sm:p-3 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl">
-                  <Star className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="bg-white rounded-xl border border-gray-200 mb-6">
-            <div className="flex border-b border-gray-200">
-              <button
-                onClick={() => setActiveTab('subscriptions')}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors relative ${
-                  activeTab === 'subscriptions'
-                    ? 'text-indigo-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Subscription Plans
-                {activeTab === 'subscriptions' && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600"
-                  />
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab('users')}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors relative ${
-                  activeTab === 'users'
-                    ? 'text-indigo-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                User Subscriptions
-                {activeTab === 'users' && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600"
-                  />
-                )}
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-6">
-              {activeTab === 'subscriptions' ? (
-                <>
-                  {subscriptions.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Crown className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-500">No subscription plans found</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                      {subscriptions.map((subscription) => (
-                        <SubscriptionCard
-                          key={subscription.id}
-                          subscription={subscription}
-                          onViewDetails={setSelectedSubscription}
-                          onEdit={handleEditClick}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <UserSubscriptionManager 
-                  users={users} 
-                  onRefresh={() => {
-                    fetchUsers();
-                    fetchSubscriptions();
-                  }}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Modals */}
-      <EditSubscriptionModal
-        isOpen={showEditModal}
-        onClose={() => {
-          setShowEditModal(false);
-          setSelectedSubscription(null);
-        }}
-        subscription={selectedSubscription}
-        onSuccess={() => {
-          fetchSubscriptions();
-          setShowEditModal(false);
-          setSelectedSubscription(null);
-        }}
+      <AssignSubscriptionModal
+        isOpen={!!assignModalStore}
+        onClose={() => setAssignModalStore(null)}
+        store={assignModalStore}
+        plans={plans}
+        onSuccess={onRefresh}
+        showToast={showToast}
       />
-
-      {/* Subscription Details Modal */}
-      <AnimatePresence>
-        {selectedSubscription && !showEditModal && (
-          <SubscriptionDetailsModal 
-            subscription={selectedSubscription} 
-            onClose={() => setSelectedSubscription(null)} 
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }
 
-// Subscription Details Modal Component (View Only)
+// ============================================================
+// Subscription Details Modal (View Only)
+// ============================================================
 function SubscriptionDetailsModal({ subscription, onClose }) {
   if (!subscription) return null;
 
@@ -1027,7 +962,7 @@ function SubscriptionDetailsModal({ subscription, onClose }) {
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Active Subscribers</p>
-                  <p className="font-medium">{subscription.subscribers || 0} Users</p>
+                  <p className="font-medium">{subscription.subscribers || 0} Stores</p>
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Monthly Revenue</p>
@@ -1058,5 +993,367 @@ function SubscriptionDetailsModal({ subscription, onClose }) {
         </motion.div>
       </motion.div>
     </AnimatePresence>
+  );
+}
+
+// ============================================================
+// Main Page
+// ============================================================
+export default function SubscriptionsPage() {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('subscriptions');
+  const [selectedSubscription, setSelectedSubscription] = useState(null);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [planModalMode, setPlanModalMode] = useState('create');
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [stats, setStats] = useState({
+    totalPlans: 0,
+    activeSubscribers: 0,
+    totalRevenue: 0,
+    popularPlan: ''
+  });
+
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+  };
+
+  const hideToast = () => {
+    setToast(null);
+  };
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      setIsSidebarOpen(!mobile);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
+    fetchSubscriptions();
+    fetchUsers();
+  }, []);
+
+  const fetchSubscriptions = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/subscriptions/all`, getAuthHeaders());
+      if (response.data.success) {
+        setSubscriptions(response.data.data);
+        calculateStats(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching subscriptions:', error);
+      showToast('Failed to fetch subscriptions', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/subscriptions/stores/all`, getAuthHeaders());
+      if (response.data.success) {
+        setUsers(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      showToast('Failed to fetch stores', 'error');
+    }
+  };
+
+  const calculateStats = (data) => {
+    const totalPlans = data.length;
+    const activeSubscribers = data.reduce((sum, plan) => sum + (plan.subscribers || 0), 0);
+    const totalRevenue = data.reduce((sum, plan) => sum + ((plan.subscribers || 0) * plan.price), 0);
+    const popularPlan = data.length
+      ? data.reduce((prev, current) => (prev.subscribers > current.subscribers ? prev : current), data[0])?.planName
+      : 'N/A';
+
+    setStats({ totalPlans, activeSubscribers, totalRevenue, popularPlan: popularPlan || 'N/A' });
+  };
+
+  const exportToExcel = () => {
+    const exportData = subscriptions.map(sub => ({
+      'Plan Name': sub.planName,
+      'Plan Type': sub.planType,
+      'Price (₹)': sub.price,
+      'Duration': sub.duration,
+      'Max Stores': sub.maxStores,
+      'Max Items': sub.maxItems,
+      'Active Subscribers': sub.subscribers || 0,
+      'Features': sub.features?.join(', ') || 'N/A',
+      'Estimated Revenue': (sub.subscribers || 0) * sub.price
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Subscriptions');
+    const fileName = `subscriptions_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    showToast('Export completed successfully!', 'success');
+  };
+
+  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+  const closeSidebar = () => {
+    if (isMobile) setIsSidebarOpen(false);
+  };
+
+  const handleCreateClick = () => {
+    setSelectedSubscription(null);
+    setPlanModalMode('create');
+    setShowPlanModal(true);
+  };
+
+  const handleEditClick = (subscription) => {
+    setSelectedSubscription(subscription);
+    setPlanModalMode('edit');
+    setShowPlanModal(true);
+  };
+
+  const handleDeleteClick = (subscription) => {
+    setDeleteTarget(subscription);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Toast Container */}
+      <AnimatePresence>
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={hideToast}
+          />
+        )}
+      </AnimatePresence>
+
+      <Sidebar isSidebarOpen={isSidebarOpen} onClose={closeSidebar} />
+      <Navbar onMenuClick={toggleSidebar} isSidebarOpen={isSidebarOpen} />
+
+      <div className={`transition-all duration-300 pt-20 ${
+        !isMobile && isSidebarOpen ? 'ml-64' : !isMobile && !isSidebarOpen ? 'ml-20' : 'ml-0'
+      }`}>
+        <div className="px-4 sm:px-6 py-4 sm:py-8 max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
+                <Crown className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Subscription Management</h1>
+                <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Manage plans and store subscriptions</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handleCreateClick}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition shadow-md font-medium text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Create Plan
+              </button>
+              <button
+                onClick={exportToExcel}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-br from-green-500 to-emerald-600 text-white rounded-lg hover:shadow-lg transition shadow-md font-medium text-sm"
+              >
+                <Download className="w-4 h-4" />
+                Export to Excel
+              </button>
+            </div>
+          </div>
+
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-sm hover:shadow-md transition"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500 text-xs sm:text-sm">Total Plans</p>
+                  <p className="text-gray-900 text-xl sm:text-2xl font-bold mt-1">{stats.totalPlans}</p>
+                </div>
+                <div className="p-2 sm:p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
+                  <Crown className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-sm hover:shadow-md transition"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500 text-xs sm:text-sm">Active Subscribers</p>
+                  <p className="text-gray-900 text-xl sm:text-2xl font-bold mt-1">{stats.activeSubscribers}</p>
+                </div>
+                <div className="p-2 sm:p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl">
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-sm hover:shadow-md transition"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500 text-xs sm:text-sm">Monthly Revenue</p>
+                  <p className="text-gray-900 text-xl sm:text-2xl font-bold mt-1">₹{stats.totalRevenue.toLocaleString()}</p>
+                </div>
+                <div className="p-2 sm:p-3 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl">
+                  <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-sm hover:shadow-md transition"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500 text-xs sm:text-sm">Popular Plan</p>
+                  <p className="text-gray-900 text-base sm:text-lg font-bold mt-1 truncate">{stats.popularPlan}</p>
+                </div>
+                <div className="p-2 sm:p-3 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl">
+                  <Star className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                </div>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Tabs */}
+          <div className="bg-white rounded-xl border border-gray-200 mb-6">
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('subscriptions')}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors relative ${
+                  activeTab === 'subscriptions' ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Subscription Plans
+                {activeTab === 'subscriptions' && (
+                  <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors relative ${
+                  activeTab === 'users' ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Store Subscriptions
+                {activeTab === 'users' && (
+                  <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />
+                )}
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6">
+              {activeTab === 'subscriptions' ? (
+                <>
+                  {subscriptions.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Crown className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500 mb-4">No subscription plans found</p>
+                      <button
+                        onClick={handleCreateClick}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition font-medium text-sm"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Create your first plan
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                      {subscriptions.map((subscription) => (
+                        <SubscriptionCard
+                          key={subscription.id}
+                          subscription={subscription}
+                          onViewDetails={setSelectedSubscription}
+                          onEdit={handleEditClick}
+                          onDelete={handleDeleteClick}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <UserSubscriptionManager
+                  users={users}
+                  plans={subscriptions}
+                  onRefresh={() => {
+                    fetchUsers();
+                    fetchSubscriptions();
+                  }}
+                  showToast={showToast}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Create / Edit Plan Modal */}
+      <PlanFormModal
+        isOpen={showPlanModal}
+        mode={planModalMode}
+        onClose={() => {
+          setShowPlanModal(false);
+          setSelectedSubscription(null);
+        }}
+        subscription={selectedSubscription}
+        onSuccess={fetchSubscriptions}
+        showToast={showToast}
+      />
+
+      {/* Delete Plan Modal */}
+      <DeletePlanModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        subscription={deleteTarget}
+        onSuccess={fetchSubscriptions}
+        showToast={showToast}
+      />
+
+      {/* Subscription Details Modal (view only) */}
+      <AnimatePresence>
+        {selectedSubscription && !showPlanModal && (
+          <SubscriptionDetailsModal
+            subscription={selectedSubscription}
+            onClose={() => setSelectedSubscription(null)}
+          />
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
